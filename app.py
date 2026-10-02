@@ -1,45 +1,145 @@
+```python
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import requests
+import numpy as np
 import json
 import os
-import time
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-
-# =========================================================
-# CONFIG
-# =========================================================
-
-IST = ZoneInfo("Asia/Kolkata")
-
-APP_TITLE = "Nifty 100 Heikin Ashi Bollinger Alert"
-
-BOLL_LENGTH = 40
-BOLL_MULTIPLIER = 4.0
-
-WATCH_DAYS = 2
-
-MARKET_START = "09:15"
-MARKET_END = "15:30"
-
-STATE_FILE = "watch_state.json"
-
-NIFTY100_URL = (
-    "https://www.niftyindices.com/IndexConstituent/"
-    "ind_nifty100list.csv"
-)
 
 # =========================================================
 # PAGE
 # =========================================================
 
 st.set_page_config(
-    page_title=APP_TITLE,
+    page_title="Nifty 100 HA Bollinger Alert",
     page_icon="📈",
     layout="wide",
 )
+
+IST = ZoneInfo("Asia/Kolkata")
+
+WATCH_FILE = "watchlist.json"
+
+BB_LENGTH = 40
+BB_MULTIPLIER = 4
+
+WATCH_DAYS = 2
+
+
+# =========================================================
+# NIFTY 100
+# =========================================================
+
+NIFTY100 = [
+    "RELIANCE.NS",
+    "HDFCBANK.NS",
+    "BHARTIARTL.NS",
+    "TCS.NS",
+    "ICICIBANK.NS",
+    "SBIN.NS",
+    "INFY.NS",
+    "LICI.NS",
+    "HINDUNILVR.NS",
+    "ITC.NS",
+    "LT.NS",
+    "BAJFINANCE.NS",
+    "HCLTECH.NS",
+    "MARUTI.NS",
+    "KOTAKBANK.NS",
+    "M&M.NS",
+    "SUNPHARMA.NS",
+    "AXISBANK.NS",
+    "ULTRACEMCO.NS",
+    "NTPC.NS",
+    "TITAN.NS",
+    "ADANIENT.NS",
+    "ONGC.NS",
+    "ADANIPORTS.NS",
+    "WIPRO.NS",
+    "POWERGRID.NS",
+    "COALINDIA.NS",
+    "NESTLEIND.NS",
+    "BAJAJFINSV.NS",
+    "JSWSTEEL.NS",
+    "TATASTEEL.NS",
+    "HINDALCO.NS",
+    "ADANIPOWER.NS",
+    "GRASIM.NS",
+    "TECHM.NS",
+    "INDUSINDBK.NS",
+    "HDFCLIFE.NS",
+    "SBILIFE.NS",
+    "DRREDDY.NS",
+    "CIPLA.NS",
+    "TATAMOTORS.NS",
+    "EICHERMOT.NS",
+    "HEROMOTOCO.NS",
+    "BAJAJ-AUTO.NS",
+    "TVSMOTOR.NS",
+    "ASIANPAINT.NS",
+    "DMART.NS",
+    "TATACONSUM.NS",
+    "BRITANNIA.NS",
+    "MARICO.NS",
+    "DABUR.NS",
+    "BEL.NS",
+    "HAL.NS",
+    "BHEL.NS",
+    "TRENT.NS",
+    "ZOMATO.NS",
+    "JIOFIN.NS",
+    "SHRIRAMFIN.NS",
+    "CHOLAFIN.NS",
+    "PFC.NS",
+    "RECLTD.NS",
+    "IOC.NS",
+    "BPCL.NS",
+    "GAIL.NS",
+    "HINDPETRO.NS",
+    "VEDL.NS",
+    "NMDC.NS",
+    "JINDALSTEL.NS",
+    "SAIL.NS",
+    "DLF.NS",
+    "LODHA.NS",
+    "GODREJPROP.NS",
+    "LTIM.NS",
+    "COFORGE.NS",
+    "PERSISTENT.NS",
+    "MPHASIS.NS",
+    "OFSS.NS",
+    "APOLLOHOSP.NS",
+    "MAXHEALTH.NS",
+    "AUROPHARMA.NS",
+    "DIVISLAB.NS",
+    "LUPIN.NS",
+    "ZYDUSLIFE.NS",
+    "TORNTPHARM.NS",
+    "INDIGO.NS",
+    "IRCTC.NS",
+    "IRFC.NS",
+    "RVNL.NS",
+    "CONCOR.NS",
+    "INDUSTOWER.NS",
+    "BHARTIARTL.NS",
+    "SIEMENS.NS",
+    "ABB.NS",
+    "CUMMINSIND.NS",
+    "AMBUJACEM.NS",
+    "SHREECEM.NS",
+    "PIDILITIND.NS",
+    "SRF.NS",
+    "INDHOTEL.NS",
+    "MOTHERSON.NS",
+    "BOSCHLTD.NS",
+]
+
+
+# Remove duplicates
+NIFTY100 = list(dict.fromkeys(NIFTY100))
+
 
 # =========================================================
 # CSS
@@ -49,54 +149,39 @@ st.markdown(
     """
 <style>
 
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-}
-
-.title {
+.main-title {
     font-size: 28px;
     font-weight: 800;
 }
 
-.subtitle {
+.sub-title {
     color: #777;
-    font-size: 14px;
     margin-bottom: 15px;
 }
 
-.box {
+.status-on {
+    background: #16a34a;
+    color: white;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-weight: 800;
+    display: inline-block;
+}
+
+.status-off {
+    background: #dc2626;
+    color: white;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-weight: 800;
+    display: inline-block;
+}
+
+.signal-box {
+    padding: 12px;
+    border-radius: 10px;
     border: 1px solid rgba(128,128,128,.25);
-    border-radius: 12px;
-    padding: 14px;
-    margin-bottom: 12px;
-}
-
-.watch {
-    border-left: 5px solid #f59e0b;
-}
-
-.triggered {
-    border-left: 5px solid #16a34a;
-}
-
-.expired {
-    border-left: 5px solid #dc2626;
-}
-
-.big-status {
-    font-size: 22px;
-    font-weight: 800;
-}
-
-.small {
-    color: #777;
-    font-size: 12px;
-}
-
-.buy {
-    color: #16a34a;
-    font-weight: 800;
+    margin-bottom: 8px;
 }
 
 </style>
@@ -104,378 +189,176 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+# =========================================================
+# WATCHLIST FILE
+# =========================================================
+
+def load_watchlist():
+
+    if not os.path.exists(WATCH_FILE):
+        return []
+
+    try:
+
+        with open(
+            WATCH_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        pass
+
+    return []
+
+
+def save_watchlist(data):
+
+    try:
+
+        with open(
+            WATCH_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                indent=2,
+                ensure_ascii=False
+            )
+
+    except Exception as e:
+
+        st.warning(
+            "Watchlist save nahi ho payi: "
+            + str(e)
+        )
+
+
+# =========================================================
+# SESSION STATE
+# =========================================================
+
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = load_watchlist()
+
+if "running" not in st.session_state:
+    st.session_state.running = True
+
+
 # =========================================================
 # HEADER
 # =========================================================
 
 st.markdown(
-    f'<div class="title">📈 {APP_TITLE}</div>',
-    unsafe_allow_html=True,
+    '<div class="main-title">'
+    '📈 Nifty 100 Heikin Ashi Bollinger Alert'
+    '</div>',
+    unsafe_allow_html=True
 )
 
 st.markdown(
-    """
-<div class="subtitle">
-Nifty 100 • Heikin Ashi • Daily Bollinger Middle Cross •
-2 Trading Day Watch • Dhan Not Used
-</div>
-""",
-    unsafe_allow_html=True,
+    '<div class="sub-title">'
+    'NSE Data • 1 Day • Heikin Ashi • Bollinger 40 / 4'
+    '</div>',
+    unsafe_allow_html=True
 )
+
+
+# =========================================================
+# ON / OFF
+# =========================================================
+
+c1, c2, c3 = st.columns(
+    [1.2, 1.2, 4]
+)
+
+with c1:
+
+    if st.button(
+        "🟢 ON",
+        use_container_width=True
+    ):
+
+        st.session_state.running = True
+        st.rerun()
+
+with c2:
+
+    if st.button(
+        "🔴 OFF",
+        use_container_width=True
+    ):
+
+        st.session_state.running = False
+        st.rerun()
+
+with c3:
+
+    if st.session_state.running:
+
+        st.markdown(
+            '<span class="status-on">'
+            'RUNNING'
+            '</span>',
+            unsafe_allow_html=True
+        )
+
+    else:
+
+        st.markdown(
+            '<span class="status-off">'
+            'STOPPED'
+            '</span>',
+            unsafe_allow_html=True
+        )
+
 
 # =========================================================
 # SETTINGS
 # =========================================================
 
-with st.sidebar:
+a, b, c, d = st.columns(4)
 
-    st.header("Settings")
-
-    enabled = st.toggle(
-        "🟢 Monitoring ON",
-        value=True,
-        key="monitoring_enabled",
-    )
-
-    st.divider()
-
-    st.write("Strategy")
-
-    st.write("Universe: Nifty 100")
-    st.write("Timeframe: 1 Day")
-    st.write("Candle: Heikin Ashi")
-    st.write(f"Bollinger Length: {BOLL_LENGTH}")
-    st.write(f"Multiplier: {BOLL_MULTIPLIER}")
-    st.write(f"Watch Period: {WATCH_DAYS} trading days")
-
-    st.divider()
-
-    st.write(
-        "Daily signal scan: completed daily candle"
-    )
-
-    st.write(
-        "Intraday trigger: 09:15–15:30"
-    )
-
-# =========================================================
-# TIME
-# =========================================================
-
-now = datetime.now(IST)
-today = now.date()
-
-market_open = (
-    now.strftime("%H:%M") >= MARKET_START
-    and now.strftime("%H:%M") <= MARKET_END
+a.metric(
+    "Universe",
+    "Nifty 100"
 )
 
-st.info(
-    f"Current: {now.strftime('%d-%b-%Y %H:%M:%S IST')} "
-    f"| Monitoring: {'ON' if enabled else 'OFF'}"
+b.metric(
+    "Timeframe",
+    "1 Day"
 )
 
-# =========================================================
-# STATE
-# =========================================================
-
-def empty_state():
-
-    return {
-        "watchlist": [],
-        "alerts": [],
-        "last_scan_date": None,
-    }
-
-
-def load_state():
-
-    if not os.path.exists(STATE_FILE):
-        return empty_state()
-
-    try:
-
-        with open(
-            STATE_FILE,
-            "r",
-            encoding="utf-8",
-        ) as f:
-
-            data = json.load(f)
-
-        if not isinstance(data, dict):
-            return empty_state()
-
-        data.setdefault(
-            "watchlist",
-            [],
-        )
-
-        data.setdefault(
-            "alerts",
-            [],
-        )
-
-        data.setdefault(
-            "last_scan_date",
-            None,
-        )
-
-        return data
-
-    except Exception:
-
-        return empty_state()
-
-
-def save_state(state):
-
-    try:
-
-        with open(
-            STATE_FILE,
-            "w",
-            encoding="utf-8",
-        ) as f:
-
-            json.dump(
-                state,
-                f,
-                indent=2,
-                ensure_ascii=False,
-            )
-
-    except Exception:
-        pass
-
-
-state = load_state()
-
-# =========================================================
-# NIFTY 100
-# =========================================================
-
-@st.cache_data(
-    ttl=3600,
-    show_spinner=False,
+c.metric(
+    "BB Length",
+    BB_LENGTH
 )
-def get_nifty100():
 
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 "
-            "(Windows NT 10.0; Win64; x64)"
-        ),
-        "Accept": "text/csv,*/*",
-    }
-
-    try:
-
-        r = requests.get(
-            NIFTY100_URL,
-            headers=headers,
-            timeout=20,
-        )
-
-        r.raise_for_status()
-
-        df = pd.read_csv(
-            __import__("io").StringIO(
-                r.text
-            )
-        )
-
-        if "Symbol" not in df.columns:
-            raise ValueError(
-                "Nifty 100 CSV me Symbol column nahi mila."
-            )
-
-        symbols = (
-            df["Symbol"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .tolist()
-        )
-
-        symbols = [
-            x
-            for x in symbols
-            if x
-            and x != "NAN"
-        ]
-
-        return sorted(
-            list(dict.fromkeys(symbols))
-        )
-
-    except Exception as e:
-
-        st.error(
-            "Nifty 100 list load nahi hui: "
-            + str(e)
-        )
-
-        return []
-
-
-symbols = get_nifty100()
-
-# =========================================================
-# YAHOO SYMBOL
-# =========================================================
-
-def yahoo_symbol(symbol):
-
-    return f"{symbol}.NS"
-
-
-# =========================================================
-# DOWNLOAD DAILY DATA
-# =========================================================
-
-@st.cache_data(
-    ttl=900,
-    show_spinner=False,
+d.metric(
+    "Multiplier",
+    BB_MULTIPLIER
 )
-def get_daily_data(symbol):
 
-    try:
-
-        df = yf.download(
-            yahoo_symbol(symbol),
-            period="1y",
-            interval="1d",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
-
-        if df is None or df.empty:
-            return pd.DataFrame()
-
-        if isinstance(
-            df.columns,
-            pd.MultiIndex,
-        ):
-
-            df.columns = [
-                c[0]
-                for c in df.columns
-            ]
-
-        df.columns = [
-            str(c).title()
-            for c in df.columns
-        ]
-
-        required = [
-            "Open",
-            "High",
-            "Low",
-            "Close",
-        ]
-
-        if not all(
-            c in df.columns
-            for c in required
-        ):
-            return pd.DataFrame()
-
-        df = df[
-            required
-        ].copy()
-
-        for c in required:
-
-            df[c] = pd.to_numeric(
-                df[c],
-                errors="coerce",
-            )
-
-        df = df.dropna()
-
-        if df.empty:
-            return df
-
-        df.index = pd.to_datetime(
-            df.index
-        )
-
-        return df
-
-    except Exception:
-
-        return pd.DataFrame()
-
-# =========================================================
-# INTRADAY DATA
-# =========================================================
-
-@st.cache_data(
-    ttl=30,
-    show_spinner=False,
-)
-def get_intraday_price(symbol):
-
-    try:
-
-        df = yf.download(
-            yahoo_symbol(symbol),
-            period="1d",
-            interval="1m",
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
-
-        if df is None or df.empty:
-            return None, None
-
-        if isinstance(
-            df.columns,
-            pd.MultiIndex,
-        ):
-
-            df.columns = [
-                c[0]
-                for c in df.columns
-            ]
-
-        if "Close" not in df.columns:
-            return None, None
-
-        close = pd.to_numeric(
-            df["Close"],
-            errors="coerce",
-        ).dropna()
-
-        if close.empty:
-            return None, None
-
-        latest_price = float(
-            close.iloc[-1]
-        )
-
-        timestamp = close.index[-1]
-
-        return (
-            latest_price,
-            timestamp,
-        )
-
-    except Exception:
-
-        return None, None
 
 # =========================================================
 # HEIKIN ASHI
 # =========================================================
 
-def heikin_ashi(df):
+def make_heikin_ashi(df):
+
+    df = df.copy()
 
     if df.empty:
-        return pd.DataFrame()
+        return df
 
     ha = pd.DataFrame(
         index=df.index
@@ -486,31 +369,27 @@ def heikin_ashi(df):
         + df["High"]
         + df["Low"]
         + df["Close"]
-    ) / 4.0
+    ) / 4
 
     ha_open = []
 
-    for i in range(
-        len(df)
-    ):
+    for i in range(len(df)):
 
         if i == 0:
 
             value = (
                 df["Open"].iloc[i]
                 + df["Close"].iloc[i]
-            ) / 2.0
+            ) / 2
 
         else:
 
             value = (
                 ha_open[i - 1]
                 + ha["HA_Close"].iloc[i - 1]
-            ) / 2.0
+            ) / 2
 
-        ha_open.append(
-            value
-        )
+        ha_open.append(value)
 
     ha["HA_Open"] = ha_open
 
@@ -518,702 +397,625 @@ def heikin_ashi(df):
         [
             df["High"],
             ha["HA_Open"],
-            ha["HA_Close"],
+            ha["HA_Close"]
         ],
-        axis=1,
+        axis=1
     ).max(axis=1)
 
     ha["HA_Low"] = pd.concat(
         [
             df["Low"],
             ha["HA_Open"],
-            ha["HA_Close"],
+            ha["HA_Close"]
         ],
-        axis=1,
+        axis=1
     ).min(axis=1)
 
     return ha
 
+
 # =========================================================
-# BOLLINGER
+# DOWNLOAD DATA
 # =========================================================
 
-def calculate_signal(df):
+@st.cache_data(
+    ttl=3600,
+    show_spinner=False
+)
+def download_data(symbol):
 
-    ha = heikin_ashi(df)
+    try:
 
-    if len(ha) < BOLL_LENGTH + 2:
+        df = yf.download(
+            symbol,
+            period="1y",
+            interval="1d",
+            auto_adjust=False,
+            progress=False,
+            threads=False
+        )
 
-        return None
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        if isinstance(
+            df.columns,
+            pd.MultiIndex
+        ):
+
+            df.columns = [
+                c[0]
+                for c in df.columns
+            ]
+
+        required = [
+            "Open",
+            "High",
+            "Low",
+            "Close"
+        ]
+
+        for col in required:
+
+            if col not in df.columns:
+                return pd.DataFrame()
+
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
+
+        df = df.dropna(
+            subset=required
+        )
+
+        return df
+
+    except Exception:
+
+        return pd.DataFrame()
+
+
+# =========================================================
+# INDICATORS
+# =========================================================
+
+def calculate_indicator(df):
+
+    ha = make_heikin_ashi(
+        df
+    )
+
+    if len(ha) < BB_LENGTH + 2:
+
+        return pd.DataFrame()
 
     ha["Middle"] = (
         ha["HA_Close"]
         .rolling(
-            BOLL_LENGTH
+            BB_LENGTH
         )
         .mean()
     )
 
-    ha["Std"] = (
+    ha["STD"] = (
         ha["HA_Close"]
         .rolling(
-            BOLL_LENGTH
+            BB_LENGTH
         )
         .std()
     )
 
     ha["Upper"] = (
         ha["Middle"]
-        + (
-            BOLL_MULTIPLIER
-            * ha["Std"]
-        )
+        + BB_MULTIPLIER
+        * ha["STD"]
     )
 
     ha["Lower"] = (
         ha["Middle"]
-        - (
-            BOLL_MULTIPLIER
-            * ha["Std"]
-        )
+        - BB_MULTIPLIER
+        * ha["STD"]
     )
 
-    # -----------------------------------------------------
-    # IMPORTANT:
-    # Use only COMPLETED daily candles.
-    #
-    # Yahoo daily data generally contains current
-    # session data during market hours. Therefore the
-    # latest row is excluded when market is open.
-    # -----------------------------------------------------
+    return ha.dropna(
+        subset=[
+            "Middle"
+        ]
+    )
 
-    if market_open:
 
-        completed = ha.iloc[:-1].copy()
+# =========================================================
+# SIGNAL CHECK
+# =========================================================
+
+def find_today_signal(
+    symbol,
+    df
+):
+
+    ind = calculate_indicator(
+        df
+    )
+
+    if len(ind) < 2:
+
+        return None
+
+    prev = ind.iloc[-2]
+    curr = ind.iloc[-1]
+
+    prev_close = float(
+        prev["HA_Close"]
+    )
+
+    curr_close = float(
+        curr["HA_Close"]
+    )
+
+    prev_middle = float(
+        prev["Middle"]
+    )
+
+    curr_middle = float(
+        curr["Middle"]
+    )
+
+    condition = (
+        prev_close <= prev_middle
+        and curr_close > curr_middle
+    )
+
+    if not condition:
+
+        return None
+
+    date_value = ind.index[-1]
+
+    if hasattr(
+        date_value,
+        "date"
+    ):
+
+        signal_date = str(
+            date_value.date()
+        )
 
     else:
 
-        completed = ha.copy()
-
-    if len(completed) < BOLL_LENGTH + 2:
-        return None
-
-    previous = completed.iloc[-2]
-    current = completed.iloc[-1]
-
-    if pd.isna(
-        previous["Middle"]
-    ) or pd.isna(
-        current["Middle"]
-    ):
-
-        return None
-
-    previous_below = (
-        float(previous["HA_Close"])
-        < float(previous["Middle"])
-    )
-
-    current_above = (
-        float(current["HA_Close"])
-        > float(current["Middle"])
-    )
-
-    crossed = (
-        previous_below
-        and current_above
-    )
-
-    if not crossed:
-        return None
-
-    candle_date = (
-        pd.Timestamp(
-            completed.index[-1]
-        ).date()
-    )
+        signal_date = str(
+            date_value
+        )
 
     high = float(
-        current["HA_High"]
-    )
-
-    close = float(
-        current["HA_Close"]
-    )
-
-    middle = float(
-        current["Middle"]
+        curr["HA_High"]
     )
 
     return {
-        "cross_date": str(
-            candle_date
-        ),
+        "symbol": symbol,
+        "signal_date": signal_date,
         "trigger_high": high,
-        "ha_close": close,
-        "middle": middle,
+        "middle": curr_middle,
+        "ha_close": curr_close,
+        "status": "WATCH",
+        "entry_date": "",
+        "entry_time": "",
+        "entry_price": "",
+        "watch_until": "",
     }
 
+
 # =========================================================
-# DAILY SCAN
+# TRADING DAYS
 # =========================================================
 
-def run_daily_scan():
+def add_two_trading_days(
+    date_string
+):
 
-    scan_date = str(
-        today
-    )
+    try:
 
-    if (
-        state.get(
-            "last_scan_date"
+        d = pd.Timestamp(
+            date_string
         )
-        == scan_date
-    ):
 
-        return 0
+        days = 0
 
-    new_count = 0
+        while days < WATCH_DAYS:
 
-    for symbol in symbols:
+            d = d + pd.Timedelta(
+                days=1
+            )
 
-        df = get_daily_data(
+            if d.weekday() < 5:
+                days += 1
+
+        return str(
+            d.date()
+        )
+
+    except Exception:
+
+        return date_string
+
+
+# =========================================================
+# UPDATE WATCHLIST
+# =========================================================
+
+def add_new_signals():
+
+    watchlist = st.session_state.watchlist
+
+    today = datetime.now(
+        IST
+    ).date()
+
+    added = []
+
+    for symbol in NIFTY100:
+
+        # Existing active signal?
+        existing = [
+            x
+            for x in watchlist
+            if x.get("symbol") == symbol
+            and x.get("status") == "WATCH"
+        ]
+
+        if existing:
+            continue
+
+        df = download_data(
             symbol
         )
 
         if df.empty:
             continue
 
-        signal = calculate_signal(
+        signal = find_today_signal(
+            symbol,
             df
         )
 
-        if not signal:
+        if signal is None:
             continue
 
-        cross_date = signal[
-            "cross_date"
-        ]
+        # Only today's latest daily candle
+        if signal["signal_date"] != str(today):
 
-        # Same signal already present?
-        already = False
-
-        for item in state[
-            "watchlist"
-        ]:
-
-            if (
-                item.get("symbol")
-                == symbol
-                and item.get("cross_date")
-                == cross_date
-            ):
-
-                already = True
-                break
-
-        if already:
             continue
 
-        item = {
-            "symbol": symbol,
-            "cross_date": cross_date,
-            "trigger_high": signal[
-                "trigger_high"
-            ],
-            "ha_close": signal[
-                "ha_close"
-            ],
-            "middle": signal[
-                "middle"
-            ],
-            "days_watched": 0,
-            "status": "WATCHING",
-            "entry_date": None,
-            "entry_time": None,
-            "entry_price": None,
-        }
-
-        state[
-            "watchlist"
-        ].append(item)
-
-        new_count += 1
-
-    state[
-        "last_scan_date"
-    ] = scan_date
-
-    save_state(
-        state
-    )
-
-    return new_count
-
-# =========================================================
-# WATCH DAY CALCULATION
-# =========================================================
-
-def trading_days_after(
-    start_date,
-    count,
-):
-
-    d = pd.Timestamp(
-        start_date
-    )
-
-    days = 0
-
-    while days < count:
-
-        d = d + pd.Timedelta(
-            days=1
-        )
-
-        if d.weekday() < 5:
-
-            days += 1
-
-    return d.date()
-
-# =========================================================
-# EXPIRE OLD WATCHES
-# =========================================================
-
-def update_expired():
-
-    changed = False
-
-    for item in state[
-        "watchlist"
-    ]:
-
-        if item.get(
-            "status"
-        ) != "WATCHING":
-            continue
-
-        try:
-
-            cross = date.fromisoformat(
-                item["cross_date"]
+        signal["watch_until"] = (
+            add_two_trading_days(
+                signal["signal_date"]
             )
-
-        except Exception:
-
-            continue
-
-        expiry = trading_days_after(
-            cross,
-            WATCH_DAYS,
         )
 
-        if today > expiry:
-
-            item[
-                "status"
-            ] = "EXPIRED"
-
-            changed = True
-
-    if changed:
-        save_state(
-            state
+        watchlist.append(
+            signal
         )
 
+        added.append(
+            symbol
+        )
+
+    st.session_state.watchlist = watchlist
+
+    save_watchlist(
+        watchlist
+    )
+
+    return added
+
+
 # =========================================================
-# LIVE TRIGGER CHECK
+# CHECK ACTIVE WATCHES
 # =========================================================
 
-def check_live_triggers():
+def check_watchlist():
 
-    if not enabled:
-        return
+    watchlist = st.session_state.watchlist
 
-    if not market_open:
-        return
+    today = datetime.now(
+        IST
+    ).date()
+
+    current_time = datetime.now(
+        IST
+    )
 
     changed = False
 
-    for item in state[
-        "watchlist"
-    ]:
+    for item in watchlist:
 
-        if item.get(
-            "status"
-        ) != "WATCHING":
-
+        if item.get("status") != "WATCH":
             continue
 
-        symbol = item[
+        symbol = item.get(
             "symbol"
-        ]
+        )
+
+        watch_until = item.get(
+            "watch_until"
+        )
 
         try:
 
-            cross = date.fromisoformat(
-                item[
-                    "cross_date"
-                ]
-            )
+            expiry = pd.Timestamp(
+                watch_until
+            ).date()
 
         except Exception:
 
             continue
 
-        expiry = trading_days_after(
-            cross,
-            WATCH_DAYS,
-        )
-
+        # Expired
         if today > expiry:
-            item[
-                "status"
-            ] = "EXPIRED"
+
+            item["status"] = "EXPIRED"
+
             changed = True
+
             continue
 
-        price, timestamp = (
-            get_intraday_price(
-                symbol
-            )
+        df = download_data(
+            symbol
         )
 
-        if price is None:
+        if df.empty:
             continue
+
+        # Latest actual NSE candle
+        latest = df.iloc[-1]
+
+        current_high = float(
+            latest["High"]
+        )
 
         trigger = float(
-            item[
-                "trigger_high"
-            ]
+            item["trigger_high"]
         )
 
-        if price >= trigger:
+        if current_high > trigger:
 
-            item[
-                "status"
-            ] = "BUY ALERT"
+            item["status"] = "TRIGGERED"
 
-            item[
-                "entry_date"
-            ] = str(
-                today
+            item["entry_date"] = (
+                str(today)
             )
 
-            item[
-                "entry_time"
-            ] = now.strftime(
-                "%H:%M:%S"
+            item["entry_time"] = (
+                current_time.strftime(
+                    "%H:%M:%S"
+                )
             )
 
-            item[
-                "entry_price"
-            ] = float(
-                price
-            )
-
-            state[
-                "alerts"
-            ].append(
-                {
-                    "symbol": symbol,
-                    "cross_date": item[
-                        "cross_date"
-                    ],
-                    "trigger_high": trigger,
-                    "entry_date": str(
-                        today
-                    ),
-                    "entry_time": now.strftime(
-                        "%H:%M:%S"
-                    ),
-                    "entry_price": float(
-                        price
-                    ),
-                }
+            item["entry_price"] = (
+                round(
+                    trigger,
+                    2
+                )
             )
 
             changed = True
 
     if changed:
-        save_state(
-            state
+
+        st.session_state.watchlist = watchlist
+
+        save_watchlist(
+            watchlist
         )
 
+
 # =========================================================
-# RUN ENGINE
+# RUN SCAN
 # =========================================================
 
-if enabled:
+if st.session_state.running:
 
-    # Daily scan only once per date.
-    #
-    # Best practice:
-    # scan completed candle after market close.
-    #
-    # During market hours the previous completed
-    # candle is used.
+    st.info(
+        "System ON hai. NSE daily data ke basis par scan ho raha hai."
+    )
 
-    if not market_open:
+    today = datetime.now(
+        IST
+    )
 
-        run_daily_scan()
+    # Daily signal check
+    if today.weekday() < 5:
 
-    update_expired()
+        with st.spinner(
+            "Nifty 100 scan ho raha hai..."
+        ):
 
-    if market_open:
+            new_symbols = add_new_signals()
 
-        check_live_triggers()
+            check_watchlist()
+
+        if new_symbols:
+
+            st.success(
+                "New WATCH signal: "
+                + ", ".join(
+                    new_symbols
+                )
+            )
+
+    else:
+
+        st.info(
+            "Weekend hai. NSE daily scan nahi chalega."
+        )
 
 else:
 
     st.warning(
-        "🔴 Monitoring OFF — scanning aur trigger checking band hai."
+        "System OFF hai. Scan band hai."
     )
 
-# =========================================================
-# REFRESH
-# =========================================================
-
-if enabled:
-
-    time.sleep(0.1)
-
-    st.markdown(
-        """
-        <div class="small">
-        Monitoring ON • App refresh ke saath active watchlist
-        check hoti rahegi.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Streamlit rerun
-    time.sleep(5)
-    st.rerun()
 
 # =========================================================
-# SUMMARY
+# WATCHLIST
 # =========================================================
 
-watching = [
+st.divider()
+
+st.subheader(
+    "👀 WATCH LIST"
+)
+
+active = [
     x
-    for x in state[
-        "watchlist"
-    ]
-    if x.get(
-        "status"
-    ) == "WATCHING"
+    for x in st.session_state.watchlist
+    if x.get("status") == "WATCH"
 ]
 
-alerts = [
+triggered = [
     x
-    for x in state[
-        "watchlist"
-    ]
-    if x.get(
-        "status"
-    ) == "BUY ALERT"
+    for x in st.session_state.watchlist
+    if x.get("status") == "TRIGGERED"
 ]
 
 expired = [
     x
-    for x in state[
-        "watchlist"
-    ]
-    if x.get(
-        "status"
-    ) == "EXPIRED"
+    for x in st.session_state.watchlist
+    if x.get("status") == "EXPIRED"
 ]
 
-c1, c2, c3, c4 = st.columns(4)
 
-c1.metric(
-    "Nifty 100",
-    len(symbols),
-)
+if not active:
 
-c2.metric(
-    "NEW / WATCHING",
-    len(watching),
-)
-
-c3.metric(
-    "BUY ALERT",
-    len(alerts),
-)
-
-c4.metric(
-    "EXPIRED",
-    len(expired),
-)
-
-# =========================================================
-# NEW WATCH TABLE
-# =========================================================
-
-st.subheader(
-    "🟡 2-Day WATCH"
-)
-
-if watching:
-
-    rows = []
-
-    for item in watching:
-
-        cross = date.fromisoformat(
-            item[
-                "cross_date"
-            ]
-        )
-
-        expiry = trading_days_after(
-            cross,
-            WATCH_DAYS,
-        )
-
-        rows.append(
-            {
-                "Share": item[
-                    "symbol"
-                ],
-                "Cross Date": item[
-                    "cross_date"
-                ],
-                "Buy Trigger": round(
-                    float(
-                        item[
-                            "trigger_high"
-                        ]
-                    ),
-                    2,
-                ),
-                "HA Close": round(
-                    float(
-                        item[
-                            "ha_close"
-                        ]
-                    ),
-                    2,
-                ),
-                "Middle": round(
-                    float(
-                        item[
-                            "middle"
-                        ]
-                    ),
-                    2,
-                ),
-                "Watch Till": str(
-                    expiry
-                ),
-                "Status": "WATCHING",
-            }
-        )
-
-    st.dataframe(
-        pd.DataFrame(rows),
-        use_container_width=True,
-        hide_index=True,
+    st.info(
+        "Abhi koi share WATCH condition me nahi hai."
     )
 
 else:
 
-    st.info(
-        "Abhi koi active 2-day WATCH signal nahi hai."
-    )
-
-# =========================================================
-# BUY ALERT TABLE
-# =========================================================
-
-st.subheader(
-    "🟢 BUY ALERT / ENTRY"
-)
-
-if alerts:
-
     rows = []
 
-    for item in alerts:
+    for x in active:
 
         rows.append(
             {
-                "Share": item[
+                "Share": x.get(
                     "symbol"
-                ],
-                "Cross Date": item[
-                    "cross_date"
-                ],
-                "Trigger High": round(
-                    float(
-                        item[
-                            "trigger_high"
-                        ]
-                    ),
-                    2,
                 ),
-                "Entry Date": item[
+                "Signal Date": x.get(
+                    "signal_date"
+                ),
+                "Trigger High": x.get(
+                    "trigger_high"
+                ),
+                "Middle Band": x.get(
+                    "middle"
+                ),
+                "HA Close": x.get(
+                    "ha_close"
+                ),
+                "Watch Till": x.get(
+                    "watch_until"
+                ),
+                "Status": "WATCH",
+            }
+        )
+
+    watch_df = pd.DataFrame(
+        rows
+    )
+
+    st.dataframe(
+        watch_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+# =========================================================
+# TRIGGERED
+# =========================================================
+
+st.divider()
+
+st.subheader(
+    "🔔 HIGH CROSS / BUY ALERT"
+)
+
+if not triggered:
+
+    st.info(
+        "Abhi kisi WATCH share ka Trigger High cross nahi hua."
+    )
+
+else:
+
+    rows = []
+
+    for x in triggered:
+
+        rows.append(
+            {
+                "Share": x.get(
+                    "symbol"
+                ),
+                "Signal Date": x.get(
+                    "signal_date"
+                ),
+                "Trigger High": x.get(
+                    "trigger_high"
+                ),
+                "Entry Date": x.get(
                     "entry_date"
-                ],
-                "Entry Time": item[
+                ),
+                "Entry Time": x.get(
                     "entry_time"
-                ],
-                "Entry Price": round(
-                    float(
-                        item[
-                            "entry_price"
-                        ]
-                    ),
-                    2,
+                ),
+                "Entry Price": x.get(
+                    "entry_price"
                 ),
                 "Status": "BUY ALERT",
             }
         )
 
+    trigger_df = pd.DataFrame(
+        rows
+    )
+
     st.dataframe(
-        pd.DataFrame(rows),
+        trigger_df,
         use_container_width=True,
-        hide_index=True,
+        hide_index=True
     )
 
-else:
-
-    st.info(
-        "Abhi koi trigger hit nahi hua."
-    )
 
 # =========================================================
-# EXPIRED
+# OLD / EXPIRED
 # =========================================================
 
-with st.expander(
-    "Expired Signals"
-):
+if expired:
 
-    if expired:
+    with st.expander(
+        "Expired Signals"
+    ):
 
         rows = []
 
-        for item in expired:
+        for x in expired:
 
             rows.append(
                 {
-                    "Share": item[
+                    "Share": x.get(
                         "symbol"
-                    ],
-                    "Cross Date": item[
-                        "cross_date"
-                    ],
-                    "Trigger High": round(
-                        float(
-                            item[
-                                "trigger_high"
-                            ]
-                        ),
-                        2,
+                    ),
+                    "Signal Date": x.get(
+                        "signal_date"
+                    ),
+                    "Trigger High": x.get(
+                        "trigger_high"
+                    ),
+                    "Watch Till": x.get(
+                        "watch_until"
                     ),
                     "Status": "EXPIRED",
                 }
@@ -1222,49 +1024,51 @@ with st.expander(
         st.dataframe(
             pd.DataFrame(rows),
             use_container_width=True,
-            hide_index=True,
+            hide_index=True
         )
 
-    else:
-
-        st.write(
-            "Koi expired signal nahi hai."
-        )
 
 # =========================================================
-# ALERT HISTORY
+# RULE DISPLAY
 # =========================================================
 
-with st.expander(
-    "BUY Alert History"
-):
+st.divider()
 
-    if state[
-        "alerts"
-    ]:
+st.subheader(
+    "Strategy Rules"
+)
 
-        st.dataframe(
-            pd.DataFrame(
-                state[
-                    "alerts"
-                ]
-            ),
-            use_container_width=True,
-            hide_index=True,
-        )
+st.markdown(
+    """
+**Universe:** Nifty 100
 
-    else:
+**Timeframe:** 1 Day
 
-        st.write(
-            "Alert history empty hai."
-        )
+**Candle:** Heikin Ashi
+
+**Bollinger Length:** 40
+
+**Multiplier:** 4
+
+**WATCH condition:**
+
+1. Previous Heikin Ashi candle Close <= Middle Band
+2. Current Heikin Ashi candle Close > Middle Band
+3. Cross wali candle ka High = BUY Trigger
+4. Share ko agle 2 trading days tak WATCH kiya jayega
+5. High cross hone par BUY ALERT generate hoga
+
+**Important:** Yeh app sirf alert/watchlist banata hai. Dhan order place nahi karta.
+"""
+)
+
 
 # =========================================================
 # FOOTER
 # =========================================================
 
 st.caption(
-    "Educational/paper alert tool. "
-    "No Dhan order is placed. "
-    "Market-data availability may depend on the public data provider."
+    "NSE market data via Yahoo Finance. "
+    "Data availability provider par depend karti hai."
 )
+```
