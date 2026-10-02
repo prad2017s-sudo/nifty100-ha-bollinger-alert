@@ -2,611 +2,1379 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import requests
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-
-st.set_page_config(
-page_title="Nifty 100 HA Bollinger Alert",
-page_icon="📈",
-layout="wide",
-)
 
 IST = ZoneInfo("Asia/Kolkata")
 
-WATCH_FILE = "watchlist.json"
+# =========================================================
+# APP CONFIG
+# =========================================================
+
+st.set_page_config(
+    page_title="Nifty 100 HA Bollinger Alert",
+    page_icon="📊",
+    layout="wide",
+)
+
+# =========================================================
+# SETTINGS
+# =========================================================
 
 BB_LENGTH = 40
-BB_MULTIPLIER = 4
-WATCH_TRADING_DAYS = 2
+BB_MULTIPLIER = 4.0
+WATCH_DAYS = 2
 
-NIFTY100 = [
-"RELIANCE.NS",
-"HDFCBANK.NS",
-"BHARTIARTL.NS",
-"TCS.NS",
-"ICICIBANK.NS",
-"SBIN.NS",
-"INFY.NS",
-"LICI.NS",
-"HINDUNILVR.NS",
-"ITC.NS",
-"LT.NS",
-"BAJFINANCE.NS",
-"HCLTECH.NS",
-"MARUTI.NS",
-"KOTAKBANK.NS",
-"M&M.NS",
-"SUNPHARMA.NS",
-"AXISBANK.NS",
-"ULTRACEMCO.NS",
-"NTPC.NS",
-"TITAN.NS",
-"ADANIENT.NS",
-"ONGC.NS",
-"ADANIPORTS.NS",
-"WIPRO.NS",
-"POWERGRID.NS",
-"COALINDIA.NS",
-"NESTLEIND.NS",
-"BAJAJFINSV.NS",
-"JSWSTEEL.NS",
-"TATASTEEL.NS",
-"HINDALCO.NS",
-"ADANIPOWER.NS",
-"GRASIM.NS",
-"TECHM.NS",
-"INDUSINDBK.NS",
-"HDFCLIFE.NS",
-"SBILIFE.NS",
-"DRREDDY.NS",
-"CIPLA.NS",
-"TATAMOTORS.NS",
-"EICHERMOT.NS",
-"HEROMOTOCO.NS",
-"BAJAJ-AUTO.NS",
-"TVSMOTOR.NS",
-"ASIANPAINT.NS",
-"DMART.NS",
-"TATACONSUM.NS",
-"BRITANNIA.NS",
-"MARICO.NS",
-"DABUR.NS",
-"BEL.NS",
-"HAL.NS",
-"BHEL.NS",
-"TRENT.NS",
-"JIOFIN.NS",
-"SHRIRAMFIN.NS",
-"CHOLAFIN.NS",
-"PFC.NS",
-"RECLTD.NS",
-"IOC.NS",
-"BPCL.NS",
-"GAIL.NS",
-"HINDPETRO.NS",
-"VEDL.NS",
-"NMDC.NS",
-"JINDALSTEL.NS",
-"SAIL.NS",
-"DLF.NS",
-"LODHA.NS",
-"GODREJPROP.NS",
-"LTIM.NS",
-"COFORGE.NS",
-"PERSISTENT.NS",
-"MPHASIS.NS",
-"OFSS.NS",
-"APOLLOHOSP.NS",
-"MAXHEALTH.NS",
-"AUROPHARMA.NS",
-"DIVISLAB.NS",
-"LUPIN.NS",
-"ZYDUSLIFE.NS",
-"TORNTPHARM.NS",
-"INDIGO.NS",
-"IRCTC.NS",
-"IRFC.NS",
-"RVNL.NS",
-"CONCOR.NS",
-"INDUSTOWER.NS",
-"SIEMENS.NS",
-"ABB.NS",
-"CUMMINSIND.NS",
-"AMBUJACEM.NS",
-"SHREECEM.NS",
-"PIDILITIND.NS",
-"SRF.NS",
-"INDHOTEL.NS",
-"MOTHERSON.NS",
-"BOSCHLTD.NS",
-]
+WATCH_FILE = "watchlist.json"
 
-NIFTY100 = list(dict.fromkeys(NIFTY100))
+NSE_URL = "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20100"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/plain,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/",
+    "Connection": "keep-alive",
+}
+
+# =========================================================
+# CSS
+# =========================================================
 
 st.markdown(
-""" <style>
-.title {
-font-size: 28px;
-font-weight: 800;
-margin-bottom: 3px;
+    """
+<style>
+
+.main-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 2px;
 }
 
-```
-.subtitle {
+.sub-title {
     color: #777;
-    margin-bottom: 18px;
+    font-size: 14px;
+    margin-bottom: 14px;
 }
 
-.on {
-    background: #16a34a;
-    color: white;
-    padding: 7px 15px;
-    border-radius: 20px;
-    font-weight: 800;
-    display: inline-block;
+.signal-box {
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(128,128,128,.25);
+    background: rgba(128,128,128,.06);
+    margin-bottom: 10px;
 }
 
-.off {
-    background: #dc2626;
-    color: white;
-    padding: 7px 15px;
-    border-radius: 20px;
-    font-weight: 800;
-    display: inline-block;
+.green-box {
+    border-left: 5px solid #16a34a;
 }
+
+.yellow-box {
+    border-left: 5px solid #eab308;
+}
+
+.red-box {
+    border-left: 5px solid #dc2626;
+}
+
+.metric-card {
+    border-radius: 10px;
+    padding: 12px;
+    border: 1px solid rgba(128,128,128,.20);
+    background: rgba(128,128,128,.05);
+    text-align: center;
+}
+
+.small-note {
+    color: #777;
+    font-size: 12px;
+}
+
 </style>
 """,
-unsafe_allow_html=True,
-```
-
+    unsafe_allow_html=True,
 )
+
+# =========================================================
+# SESSION STATE
+# =========================================================
+
+if "scanner_on" not in st.session_state:
+    st.session_state.scanner_on = True
+
+if "last_scan_date" not in st.session_state:
+    st.session_state.last_scan_date = None
+
+if "last_scan_time" not in st.session_state:
+    st.session_state.last_scan_time = None
+
+# =========================================================
+# WATCHLIST FILE
+# =========================================================
 
 def load_watchlist():
 
-```
-if not os.path.exists(WATCH_FILE):
+    if not os.path.exists(WATCH_FILE):
+        return []
+
+    try:
+        with open(
+            WATCH_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        pass
+
     return []
 
-try:
-    with open(
-        WATCH_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-        data = json.load(f)
-
-    if isinstance(data, list):
-        return data
-
-except Exception:
-    pass
-
-return []
-```
 
 def save_watchlist(data):
 
-```
-try:
-    with open(
-        WATCH_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-        json.dump(
-            data,
-            f,
-            indent=2,
-            ensure_ascii=False
-        )
-except Exception:
-    pass
-```
+    try:
+        with open(
+            WATCH_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
+            json.dump(
+                data,
+                f,
+                ensure_ascii=False,
+                indent=2
+            )
 
-if "running" not in st.session_state:
-st.session_state.running = True
-
-if "watchlist" not in st.session_state:
-st.session_state.watchlist = load_watchlist()
-
-st.markdown(
-'<div class="title">📈 Nifty 100 Heikin Ashi Bollinger Alert</div>',
-unsafe_allow_html=True
-)
-
-st.markdown(
-'<div class="subtitle">NSE Data • 1 Day • Heikin Ashi • Bollinger 40 / 4 • No Dhan</div>',
-unsafe_allow_html=True
-)
-
-c1, c2, c3 = st.columns([1, 1, 4])
-
-with c1:
-if st.button(
-"🟢 ON",
-use_container_width=True
-):
-st.session_state.running = True
-st.rerun()
-
-with c2:
-if st.button(
-"🔴 OFF",
-use_container_width=True
-):
-st.session_state.running = False
-st.rerun()
-
-with c3:
-if st.session_state.running:
-st.markdown(
-'<span class="on">RUNNING</span>',
-unsafe_allow_html=True
-)
-else:
-st.markdown(
-'<span class="off">STOPPED</span>',
-unsafe_allow_html=True
-)
-
-m1, m2, m3, m4 = st.columns(4)
-
-m1.metric("Universe", "Nifty 100")
-m2.metric("Timeframe", "1 Day")
-m3.metric("BB Length", BB_LENGTH)
-m4.metric("Multiplier", BB_MULTIPLIER)
-
-def make_heikin_ashi(df):
-
-```
-if df.empty:
-    return pd.DataFrame()
-
-df = df.copy()
-
-ha = pd.DataFrame(index=df.index)
-
-ha["HA_Close"] = (
-    df["Open"]
-    + df["High"]
-    + df["Low"]
-    + df["Close"]
-) / 4
-
-ha_open = []
-
-for i in range(len(df)):
-
-    if i == 0:
-        value = (
-            df["Open"].iloc[i]
-            + df["Close"].iloc[i]
-        ) / 2
-    else:
-        value = (
-            ha_open[i - 1]
-            + ha["HA_Close"].iloc[i - 1]
-        ) / 2
-
-    ha_open.append(value)
-
-ha["HA_Open"] = ha_open
-
-ha["HA_High"] = pd.concat(
-    [
-        df["High"],
-        ha["HA_Open"],
-        ha["HA_Close"],
-    ],
-    axis=1
-).max(axis=1)
-
-ha["HA_Low"] = pd.concat(
-    [
-        df["Low"],
-        ha["HA_Open"],
-        ha["HA_Close"],
-    ],
-    axis=1
-).min(axis=1)
-
-return ha
-```
-
-@st.cache_data(
-ttl=3600,
-show_spinner=False
-)
-def get_daily_data(symbol):
-
-```
-try:
-
-    df = yf.download(
-        symbol,
-        period="1y",
-        interval="1d",
-        auto_adjust=False,
-        progress=False,
-        threads=False
-    )
-
-    if df is None or df.empty:
-        return pd.DataFrame()
-
-    if isinstance(
-        df.columns,
-        pd.MultiIndex
-    ):
-        df.columns = [
-            c[0]
-            for c in df.columns
-        ]
-
-    required = [
-        "Open",
-        "High",
-        "Low",
-        "Close"
-    ]
-
-    if any(
-        c not in df.columns
-        for c in required
-    ):
-        return pd.DataFrame()
-
-    for c in required:
-        df[c] = pd.to_numeric(
-            df[c],
-            errors="coerce"
-        )
-
-    df = df.dropna(
-        subset=required
-    )
-
-    return df
-
-except Exception:
-    return pd.DataFrame()
-```
-
-def calculate_bollinger(df):
-
-```
-ha = make_heikin_ashi(df)
-
-if len(ha) < BB_LENGTH + 2:
-    return pd.DataFrame()
-
-ha["Middle"] = (
-    ha["HA_Close"]
-    .rolling(BB_LENGTH)
-    .mean()
-)
-
-ha["STD"] = (
-    ha["HA_Close"]
-    .rolling(BB_LENGTH)
-    .std()
-)
-
-ha["Upper"] = (
-    ha["Middle"]
-    + BB_MULTIPLIER * ha["STD"]
-)
-
-ha["Lower"] = (
-    ha["Middle"]
-    - BB_MULTIPLIER * ha["STD"]
-)
-
-return ha.dropna(
-    subset=["Middle"]
-)
-```
-
-def get_signal(symbol, df):
-
-```
-ind = calculate_bollinger(df)
-
-if len(ind) < 2:
-    return None
-
-previous = ind.iloc[-2]
-current = ind.iloc[-1]
-
-previous_close = float(
-    previous["HA_Close"]
-)
-
-previous_middle = float(
-    previous["Middle"]
-)
-
-current_close = float(
-    current["HA_Close"]
-)
-
-current_middle = float(
-    current["Middle"]
-)
-
-crossed = (
-    previous_close <= previous_middle
-    and current_close > current_middle
-)
-
-if not crossed:
-    return None
-
-signal_date = ind.index[-1]
-
-if hasattr(
-    signal_date,
-    "date"
-):
-    signal_date = str(
-        signal_date.date()
-    )
-else:
-    signal_date = str(
-        signal_date
-    )
-
-trigger_high = float(
-    current["HA_High"]
-)
-
-return {
-    "symbol": symbol,
-    "signal_date": signal_date,
-    "trigger_high": round(
-        trigger_high,
-        2
-    ),
-    "middle": round(
-        current_middle,
-        2
-    ),
-    "ha_close": round(
-        current_close,
-        2
-    ),
-    "status": "WATCH",
-    "watch_day": 0,
-    "watch_until": "",
-    "entry_date": "",
-    "entry_time": "",
-    "entry_price": "",
-}
-```
-
-def is_weekday(date_obj):
-
-```
-return date_obj.weekday() < 5
-```
-
-def calculate_watch_until(signal_date):
-
-```
-try:
-
-    d = pd.Timestamp(
-        signal_date
-    )
-
-    count = 0
-
-    while count < WATCH_TRADING_DAYS:
-
-        d = d + pd.Timedelta(
-            days=1
-        )
-
-        if d.weekday() < 5:
-            count += 1
-
-    return str(
-        d.date()
-    )
-
-except Exception:
-
-    return str(
-        signal_date
-    )
-```
-
-def already_exists(
-symbol,
-signal_date
-):
-
-```
-for item in st.session_state.watchlist:
-
-    if (
-        item.get("symbol") == symbol
-        and item.get("signal_date") == signal_date
-    ):
         return True
 
-return False
-```
+    except Exception:
+        return False
 
-def scan_for_new_signals():
 
-```
-today = datetime.now(
-    IST
-).date()
+# =========================================================
+# NIFTY 100 LIST
+# =========================================================
 
-today_string = str(today)
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_nifty100_symbols():
 
-new_signals = []
+    try:
 
-for symbol in NIFTY100:
+        session = requests.Session()
 
-    df = get_daily_data(
+        session.get(
+            "https://www.nseindia.com",
+            headers=HEADERS,
+            timeout=15
+        )
+
+        response = session.get(
+            NSE_URL,
+            headers=HEADERS,
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        records = data.get(
+            "data",
+            []
+        )
+
+        symbols = []
+
+        for row in records:
+
+            symbol = str(
+                row.get(
+                    "symbol",
+                    ""
+                )
+            ).strip().upper()
+
+            if symbol:
+                symbols.append(symbol)
+
+        symbols = list(
+            dict.fromkeys(symbols)
+        )
+
+        if len(symbols) >= 80:
+            return symbols
+
+    except Exception:
+        pass
+
+    # Fallback list
+    return [
+        "ADANIENT",
+        "ADANIPORTS",
+        "ADANIPOWER",
+        "APOLLOHOSP",
+        "ASIANPAINT",
+        "AXISBANK",
+        "BAJAJ-AUTO",
+        "BAJFINANCE",
+        "BAJAJFINSV",
+        "BEL",
+        "BHARTIARTL",
+        "BPCL",
+        "BRITANNIA",
+        "CIPLA",
+        "COALINDIA",
+        "DRREDDY",
+        "EICHERMOT",
+        "ETERNAL",
+        "GRASIM",
+        "HCLTECH",
+        "HDFCBANK",
+        "HDFCLIFE",
+        "HEROMOTOCO",
+        "HINDALCO",
+        "HINDUNILVR",
+        "ICICIBANK",
+        "INDIGO",
+        "INDUSINDBK",
+        "INFY",
+        "ITC",
+        "JIOFIN",
+        "JSWSTEEL",
+        "KOTAKBANK",
+        "LT",
+        "M&M",
+        "MARUTI",
+        "MAXHEALTH",
+        "NESTLEIND",
+        "NTPC",
+        "ONGC",
+        "POWERGRID",
+        "RELIANCE",
+        "SBILIFE",
+        "SBIN",
+        "SHRIRAMFIN",
+        "SUNPHARMA",
+        "TATACONSUM",
+        "TATAMOTORS",
+        "TATASTEEL",
+        "TCS",
+        "TECHM",
+        "TITAN",
+        "TRENT",
+        "ULTRACEMCO",
+        "WIPRO",
+    ]
+
+
+# =========================================================
+# YFINANCE SYMBOL
+# =========================================================
+
+def yf_symbol(symbol):
+
+    return f"{symbol}.NS"
+
+
+# =========================================================
+# DOWNLOAD DAILY DATA
+# =========================================================
+
+@st.cache_data(
+    ttl=1800,
+    show_spinner=False
+)
+def download_daily(symbol):
+
+    try:
+
+        ticker = yf.Ticker(
+            yf_symbol(symbol)
+        )
+
+        df = ticker.history(
+            period="15mo",
+            interval="1d",
+            auto_adjust=False,
+            actions=False
+        )
+
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        df = df.copy()
+
+        if isinstance(
+            df.columns,
+            pd.MultiIndex
+        ):
+            df.columns = [
+                c[0]
+                for c in df.columns
+            ]
+
+        required = [
+            "Open",
+            "High",
+            "Low",
+            "Close"
+        ]
+
+        for col in required:
+
+            if col not in df.columns:
+                return pd.DataFrame()
+
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
+
+        df = df.dropna(
+            subset=required
+        )
+
+        if df.empty:
+            return pd.DataFrame()
+
+        return df
+
+    except Exception:
+        return pd.DataFrame()
+
+
+# =========================================================
+# HEIKIN ASHI
+# =========================================================
+
+def heikin_ashi(df):
+
+    if df.empty:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(
+        index=df.index
+    )
+
+    o = df["Open"].astype(float)
+    h = df["High"].astype(float)
+    l = df["Low"].astype(float)
+    c = df["Close"].astype(float)
+
+    ha_close = (
+        o + h + l + c
+    ) / 4.0
+
+    ha_open = np.zeros(
+        len(df),
+        dtype=float
+    )
+
+    ha_open[0] = (
+        o.iloc[0]
+        + c.iloc[0]
+    ) / 2.0
+
+    for i in range(
+        1,
+        len(df)
+    ):
+
+        ha_open[i] = (
+            ha_open[i - 1]
+            + ha_close.iloc[i - 1]
+        ) / 2.0
+
+    ha_high = pd.concat(
+        [
+            pd.Series(
+                ha_open,
+                index=df.index
+            ),
+            ha_close,
+            h
+        ],
+        axis=1
+    ).max(axis=1)
+
+    ha_low = pd.concat(
+        [
+            pd.Series(
+                ha_open,
+                index=df.index
+            ),
+            ha_close,
+            l
+        ],
+        axis=1
+    ).min(axis=1)
+
+    out["HA_Open"] = ha_open
+    out["HA_High"] = ha_high
+    out["HA_Low"] = ha_low
+    out["HA_Close"] = ha_close
+
+    return out
+
+
+# =========================================================
+# BOLLINGER
+# =========================================================
+
+def add_bollinger(ha):
+
+    if ha.empty:
+        return ha
+
+    out = ha.copy()
+
+    out["Middle"] = (
+        out["HA_Close"]
+        .rolling(
+            BB_LENGTH
+        )
+        .mean()
+    )
+
+    out["Std"] = (
+        out["HA_Close"]
+        .rolling(
+            BB_LENGTH
+        )
+        .std(
+            ddof=0
+        )
+    )
+
+    out["Upper"] = (
+        out["Middle"]
+        + (
+            BB_MULTIPLIER
+            * out["Std"]
+        )
+    )
+
+    out["Lower"] = (
+        out["Middle"]
+        - (
+            BB_MULTIPLIER
+            * out["Std"]
+        )
+    )
+
+    return out
+
+
+# =========================================================
+# CROSS CONDITION
+# =========================================================
+
+def find_cross_signal(df):
+
+    if df.empty:
+        return None
+
+    ha = heikin_ashi(df)
+
+    if ha.empty:
+        return None
+
+    bb = add_bollinger(
+        ha
+    )
+
+    if len(bb) < BB_LENGTH + 2:
+        return None
+
+    prev = bb.iloc[-2]
+    curr = bb.iloc[-1]
+
+    if pd.isna(
+        prev["Middle"]
+    ):
+        return None
+
+    if pd.isna(
+        curr["Middle"]
+    ):
+        return None
+
+    previous_below = (
+        float(prev["HA_Close"])
+        < float(prev["Middle"])
+    )
+
+    current_above = (
+        float(curr["HA_Close"])
+        > float(curr["Middle"])
+    )
+
+    if not (
+        previous_below
+        and current_above
+    ):
+        return None
+
+    signal_date = (
+        pd.Timestamp(
+            bb.index[-1]
+        ).date()
+    )
+
+    trigger_high = float(
+        df["High"].iloc[-1]
+    )
+
+    ha_high = float(
+        curr["HA_High"]
+    )
+
+    ha_close = float(
+        curr["HA_Close"]
+    )
+
+    middle = float(
+        curr["Middle"]
+    )
+
+    return {
+        "signal_date": str(
+            signal_date
+        ),
+        "trigger_high": trigger_high,
+        "ha_high": ha_high,
+        "ha_close": ha_close,
+        "middle": middle,
+    }
+
+
+# =========================================================
+# CHECK ENTRY
+# =========================================================
+
+def check_entry(
+    symbol,
+    trigger_high,
+    start_date
+):
+
+    df = download_daily(
         symbol
     )
 
     if df.empty:
-        continue
+        return None
 
-    signal = get_signal(
-        symbol,
+    data = df.copy()
+
+    data.index = pd.to_datetime(
+        data.index
+    )
+
+    try:
+
+        data = data[
+            data.index.date
+            > start_date
+        ]
+
+    except Exception:
+        return None
+
+    if data.empty:
+        return None
+
+    data = data.head(
+        WATCH_DAYS
+    )
+
+    for idx, row in data.iterrows():
+
+        high = float(
+            row["High"]
+        )
+
+        if high > float(
+            trigger_high
+        ):
+
+            entry_date = (
+                pd.Timestamp(
+                    idx
+                ).date()
+            )
+
+            return {
+                "entry_date": str(
+                    entry_date
+                ),
+                "entry_time": "09:15-15:30",
+                "entry_price": float(
+                    trigger_high
+                ),
+            }
+
+    return None
+
+
+# =========================================================
+# SCAN ONE SYMBOL
+# =========================================================
+
+def scan_symbol(symbol):
+
+    df = download_daily(
+        symbol
+    )
+
+    if df.empty:
+        return None
+
+    signal = find_cross_signal(
         df
     )
 
     if signal is None:
-        continue
+        return None
 
-    if signal["signal_date"] != today_string:
-        continue
+    return {
+        "Symbol": symbol,
+        "Signal Date": signal[
+            "signal_date"
+        ],
+        "Trigger High": signal[
+            "trigger_high"
+        ],
+        "HA Close": signal[
+            "ha_close"
+        ],
+        "Middle": signal[
+            "middle"
+        ],
+        "Status": "WATCHING",
+        "Entry Date": "",
+        "Entry Time": "",
+        "Entry Price": "",
+        "Days Left": WATCH_DAYS,
+    }
 
-    if already_exists(
-        symbol,
-        signal["signal_date"]
+
+# =========================================================
+# DATE HELPERS
+# =========================================================
+
+def trading_days_after(
+    signal_date,
+    days=2
+):
+
+    try:
+
+        start = pd.Timestamp(
+            signal_date
+        )
+
+        end = start + pd.Timedelta(
+            days=7
+        )
+
+        weekdays = pd.date_range(
+            start=start + pd.Timedelta(days=1),
+            end=end,
+            freq="B"
+        )
+
+        return [
+            str(x.date())
+            for x in weekdays[:days]
+        ]
+
+    except Exception:
+        return []
+
+
+def days_left(
+    signal_date
+):
+
+    dates = trading_days_after(
+        signal_date,
+        WATCH_DAYS
+    )
+
+    today = datetime.now(
+        IST
+    ).date()
+
+    remaining = 0
+
+    for d in dates:
+
+        try:
+
+            if pd.Timestamp(
+                d
+            ).date() >= today:
+
+                remaining += 1
+
+        except Exception:
+            pass
+
+    return remaining
+
+
+# =========================================================
+# UPDATE EXISTING WATCHLIST
+# =========================================================
+
+def update_watchlist(
+    watchlist
+):
+
+    changed = False
+
+    active = []
+
+    for item in watchlist:
+
+        symbol = item.get(
+            "Symbol",
+            ""
+        )
+
+        signal_date_text = item.get(
+            "Signal Date",
+            ""
+        )
+
+        trigger = item.get(
+            "Trigger High"
+        )
+
+        status = item.get(
+            "Status",
+            "WATCHING"
+        )
+
+        if not symbol:
+            continue
+
+        if status == "TRIGGERED":
+            active.append(item)
+            continue
+
+        if status == "EXPIRED":
+            active.append(item)
+            continue
+
+        try:
+
+            signal_date = pd.Timestamp(
+                signal_date_text
+            ).date()
+
+        except Exception:
+
+            active.append(item)
+            continue
+
+        watch_dates = trading_days_after(
+            signal_date,
+            WATCH_DAYS
+        )
+
+        today = datetime.now(
+            IST
+        ).date()
+
+        # Future / current watch period
+        if today not in [
+            pd.Timestamp(x).date()
+            for x in watch_dates
+        ]:
+
+            if today > pd.Timestamp(
+                watch_dates[-1]
+            ).date():
+
+                item["Status"] = "EXPIRED"
+                item["Days Left"] = 0
+                changed = True
+
+            active.append(item)
+            continue
+
+        entry = check_entry(
+            symbol,
+            float(trigger),
+            signal_date
+        )
+
+        if entry:
+
+            item["Status"] = "TRIGGERED"
+
+            item["Entry Date"] = (
+                entry["entry_date"]
+            )
+
+            item["Entry Time"] = (
+                entry["entry_time"]
+            )
+
+            item["Entry Price"] = (
+                entry["entry_price"]
+            )
+
+            item["Days Left"] = 0
+
+            changed = True
+
+        else:
+
+            left = days_left(
+                signal_date
+            )
+
+            if item.get(
+                "Days Left"
+            ) != left:
+
+                item["Days Left"] = left
+                changed = True
+
+        active.append(item)
+
+    return active, changed
+
+
+# =========================================================
+# ADD NEW SIGNALS
+# =========================================================
+
+def add_new_signals(
+    watchlist,
+    symbols
+):
+
+    existing_keys = set()
+
+    for item in watchlist:
+
+        existing_keys.add(
+            (
+                item.get(
+                    "Symbol"
+                ),
+                item.get(
+                    "Signal Date"
+                )
+            )
+        )
+
+    today = datetime.now(
+        IST
+    ).date()
+
+    added = 0
+
+    progress = st.progress(
+        0
+    )
+
+    total = len(
+        symbols
+    )
+
+    for i, symbol in enumerate(
+        symbols
     ):
-        continue
 
-    signal["watch_until"] = calculate_watch_until(
-        signal["signal_date"]
+        signal = scan_symbol(
+            symbol
+        )
+
+        if signal:
+
+            key = (
+                signal["Symbol"],
+                signal["Signal Date"]
+            )
+
+            if key not in existing_keys:
+
+                watchlist.append(
+                    signal
+                )
+
+                existing_keys.add(
+                    key
+                )
+
+                added += 1
+
+        progress.progress(
+            (i + 1) / max(
+                total,
+                1
+            )
+        )
+
+    progress.empty()
+
+    return watchlist, added
+
+
+# =========================================================
+# MARKET STATUS
+# =========================================================
+
+def is_market_time():
+
+    now = datetime.now(
+        IST
     )
 
-    st.session_state.watchlist.append(
-        signal
+    if now.weekday() >= 5:
+        return False
+
+    current = now.time()
+
+    start = datetime.strptime(
+        "09:00",
+        "%H:%M"
+    ).time()
+
+    end = datetime.strptime(
+        "15:30",
+        "%H:%M"
+    ).time()
+
+    return (
+        start <= current <= end
     )
 
-    new_signals.append(
-        symbol
+
+# =========================================================
+# HEADER
+# =========================================================
+
+st.markdown(
+    '<div class="main-title">'
+    '📊 Nifty 100 Heikin Ashi Bollinger Alert'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="sub-title">'
+    'NSE data • Heikin Ashi • 1 Day • Bollinger 40 / 4 • '
+    '2-Day High Break Watch'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+# =========================================================
+# CONTROL
+# =========================================================
+
+c1, c2, c3, c4 = st.columns(
+    4
+)
+
+with c1:
+
+    if st.session_state.scanner_on:
+
+        if st.button(
+            "🟢 Scanner ON",
+            use_container_width=True
+        ):
+
+            st.session_state.scanner_on = False
+            st.rerun()
+
+    else:
+
+        if st.button(
+            "🔴 Scanner OFF",
+            use_container_width=True
+        ):
+
+            st.session_state.scanner_on = True
+            st.rerun()
+
+with c2:
+
+    st.metric(
+        "Universe",
+        "Nifty 100"
     )
 
-if new_signals:
-    save_watchlist(
-        st.session_state.watchlist
+with c3:
+
+    st.metric(
+        "Bollinger",
+        "40 / 4"
     )
 
-return new_signals
-```
+with c4:
 
-def check_expiry():
+    st.metric(
+        "Watch",
+        "2 Days"
+    )
 
-```
-today = datetime.now(
+st.caption(
+    "Scanner ON hone par signal scan/update hoga. "
+    "OFF hone par automatic scan nahi chalega."
+)
+
+# =========================================================
+# INFO
+# =========================================================
+
+st.info(
+    "Signal rule: पिछली Heikin Ashi candle ka Close "
+    "Middle Band se neeche ho aur current Heikin Ashi candle "
+    "Middle Band ke upar close ho. Signal candle ka NORMAL "
+    "candle High BUY Trigger hai."
+)
+
+# =========================================================
+# LOAD WATCHLIST
+# =========================================================
+
+watchlist = load_watchlist()
+
+# =========================================================
+# UPDATE EXISTING WATCHLIST
+# =========================================================
+
+if st.session_state.scanner_on:
+
+    watchlist, changed = update_watchlist(
+        watchlist
+    )
+
+    if changed:
+        save_watchlist(
+            watchlist
+        )
+
+# =========================================================
+# DAILY SCAN
+# =========================================================
+
+now = datetime.now(
     IST
-).date()
+)
 
-changed = False
+today = now.date()
 
-for item in st.session_state.watchlist:
+market_open_window = is_market_time()
 
-    if
-```
+scan_allowed = (
+    st.session_state.scanner_on
+    and (
+        st.session_state.last_scan_date
+        != today
+    )
+)
+
+if scan_allowed:
+
+    st.subheader(
+        "🔎 Daily Nifty 100 Scan"
+    )
+
+    symbols = get_nifty100_symbols()
+
+    st.write(
+        f"Nifty 100 symbols loaded: "
+        f"{len(symbols)}"
+    )
+
+    # Scan once per app session/day
+    watchlist, added = add_new_signals(
+        watchlist,
+        symbols
+    )
+
+    save_watchlist(
+        watchlist
+    )
+
+    st.session_state.last_scan_date = today
+    st.session_state.last_scan_time = now.strftime(
+        "%H:%M:%S"
+    )
+
+    if added:
+
+        st.success(
+            f"{added} new signal(s) WATCHLIST me add hue."
+        )
+
+    else:
+
+        st.info(
+            "Aaj koi naya Heikin Ashi Bollinger cross nahi mila."
+        )
+
+# =========================================================
+# MANUAL SCAN
+# =========================================================
+
+if st.button(
+    "🔄 Manual Scan Now",
+    use_container_width=True
+):
+
+    symbols = get_nifty100_symbols()
+
+    with st.spinner(
+        "Nifty 100 scan ho raha hai..."
+    ):
+
+        watchlist, added = add_new_signals(
+            watchlist,
+            symbols
+        )
+
+        watchlist, changed = update_watchlist(
+            watchlist
+        )
+
+        save_watchlist(
+            watchlist
+        )
+
+    st.session_state.last_scan_date = today
+    st.session_state.last_scan_time = now.strftime(
+        "%H:%M:%S"
+    )
+
+    if added:
+
+        st.success(
+            f"{added} new signal(s) mile."
+        )
+
+    else:
+
+        st.info(
+            "Koi naya signal nahi mila."
+        )
+
+    st.rerun()
+
+# =========================================================
+# STATUS
+# =========================================================
+
+st.markdown(
+    "---"
+)
+
+status_col1, status_col2, status_col3 = st.columns(
+    3
+)
+
+with status_col1:
+
+    if st.session_state.scanner_on:
+
+        st.success(
+            "Scanner: ON"
+        )
+
+    else:
+
+        st.error(
+            "Scanner: OFF"
+        )
+
+with status_col2:
+
+    st.write(
+        f"Last scan: "
+        f"{st.session_state.last_scan_time or '--'}"
+    )
+
+with status_col3:
+
+    st.write(
+        f"Market window: "
+        f"{'09:00–15:30' if market_open_window else 'Closed'}"
+    )
+
+# =========================================================
+# WATCHLIST TABLE
+# =========================================================
+
+st.subheader(
+    "👀 Watchlist"
+)
+
+if not watchlist:
+
+    st.info(
+        "Abhi koi share WATCHLIST me nahi hai. "
+        "Signal milne par yahan automatically aayega."
+    )
+
+else:
+
+    rows = []
+
+    for item in watchlist:
+
+        rows.append(
+            {
+                "Share": item.get(
+                    "Symbol",
+                    ""
+                ),
+                "Signal Date": item.get(
+                    "Signal Date",
+                    ""
+                ),
+                "Trigger High": item.get(
+                    "Trigger High",
+                    ""
+                ),
+                "HA Close": item.get(
+                    "HA Close",
+                    ""
+                ),
+                "Middle": item.get(
+                    "Middle",
+                    ""
+                ),
+                "Status": item.get(
+                    "Status",
+                    ""
+                ),
+                "Days Left": item.get(
+                    "Days Left",
+                    ""
+                ),
+                "Entry Date": item.get(
+                    "Entry Date",
+                    ""
+                ),
+                "Entry Time": item.get(
+                    "Entry Time",
+                    ""
+                ),
+                "Entry Price": item.get(
+                    "Entry Price",
+                    ""
+                ),
+            }
+        )
+
+    table = pd.DataFrame(
+        rows
+    )
+
+    st.dataframe(
+        table,
+        use_container_width=True,
+        hide_index=True
+    )
+
+# =========================================================
+# SIGNAL DETAILS
+# =========================================================
+
+watch_count = sum(
+    1
+    for x in watchlist
+    if x.get("Status") == "WATCHING"
+)
+
+triggered_count = sum(
+    1
+    for x in watchlist
+    if x.get("Status") == "TRIGGERED"
+)
+
+expired_count = sum(
+    1
+    for x in watchlist
+    if x.get("Status") == "EXPIRED"
+)
+
+a, b, c = st.columns(
+    3
+)
+
+with a:
+
+    st.metric(
+        "Currently Watching",
+        watch_count
+    )
+
+with b:
+
+    st.metric(
+        "BUY Trigger Hit",
+        triggered_count
+    )
+
+with c:
+
+    st.metric(
+        "Expired",
+        expired_count
+    )
+
+# =========================================================
+# RULES
+# =========================================================
+
+with st.expander(
+    "📘 Scanner Rules"
+):
+
+    st.write(
+        f"""
+1. Universe: **Nifty 100**
+2. Timeframe: **1 Day**
+3. Candle: **Heikin Ashi**
+4. Bollinger Length: **{BB_LENGTH}**
+5. Multiplier: **{BB_MULTIPLIER}**
+6. Previous HA Close < Previous Middle Band
+7. Current HA Close > Current Middle Band
+8. Cross candle ka **NORMAL candle High** BUY Trigger hai.
+9. Trigger ko signal ke baad **2 trading days** tak watch kiya jayega.
+10. Agar High cross hota hai to **Entry Date, Time aur Entry Price** save hoga.
+11. 2 trading days me trigger nahi hua to status **EXPIRED**.
+12. Dhan API/order ka koi use nahi hai.
+        """
+    )
+
+# =========================================================
+# REFRESH
+# =========================================================
+
+if st.session_state.scanner_on:
+
+    st.caption(
+        "Scanner ON hai. App ko refresh/reload karne par "
+        "saved watchlist dobara load hogi."
+    )
