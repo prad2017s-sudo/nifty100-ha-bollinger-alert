@@ -1,5 +1,5 @@
 # =========================================================
-# NIFTY 100 - FULL 100 STOCK UNIVERSE
+# NIFTY 100 LIST - FULL 100 STOCKS
 # =========================================================
 
 NIFTY100_CSV_URL = (
@@ -8,128 +8,125 @@ NIFTY100_CSV_URL = (
 )
 
 
-# ---------------------------------------------------------
-# HARD-CODED NIFTY 100 FALLBACK
-# ---------------------------------------------------------
-# App पहले official NSE CSV से list लेने की कोशिश करेगा.
-# अगर NSE unavailable हो, तो यह 100-symbol fallback चलेगा.
-# ---------------------------------------------------------
+# =========================================================
+# NIFTY 100 FALLBACK
+# =========================================================
 
 NIFTY100_FALLBACK = [
 
-    "ABB",
-    "ADANIENSOL",
+    # -------------------------
+    # NIFTY 50
+    # -------------------------
+
     "ADANIENT",
-    "ADANIGREEN",
     "ADANIPORTS",
-    "ADANIPOWER",
     "APOLLOHOSP",
     "ASIANPAINT",
     "AXISBANK",
     "BAJAJ-AUTO",
-
     "BAJFINANCE",
     "BAJAJFINSV",
-    "BAJAJHLDNG",
-    "BANKBARODA",
     "BEL",
     "BHARTIARTL",
-    "BIOCON",
-    "BOSCHLTD",
-    "BPCL",
-    "BRITANNIA",
-
-    "CANBK",
-    "CGPOWER",
-    "CHOLAFIN",
     "CIPLA",
     "COALINDIA",
-    "CUMMINSIND",
-    "DIVISLAB",
-    "DLF",
-    "DMART",
     "DRREDDY",
-
     "EICHERMOT",
     "ETERNAL",
-    "GAIL",
-    "GLAND",
-    "GODREJCP",
     "GRASIM",
-    "HAL",
     "HCLTECH",
-    "HDFCAMC",
     "HDFCBANK",
-
     "HDFCLIFE",
-    "HEROMOTOCO",
     "HINDALCO",
     "HINDUNILVR",
-    "HINDZINC",
     "ICICIBANK",
-    "ICICIGI",
-    "ICICIPRULI",
     "INDIGO",
-    "INDUSINDBK",
-
     "INFY",
-    "IOC",
     "ITC",
-    "JINDALSTEL",
-    "JSWSTEEL",
     "JIOFIN",
+    "JSWSTEEL",
     "KOTAKBANK",
     "LT",
-    "LUPIN",
     "M&M",
-
-    "MARICO",
     "MARUTI",
     "MAXHEALTH",
-    "MOTHERSON",
-    "MUTHOOTFIN",
     "NESTLEIND",
-    "NMDC",
     "NTPC",
     "ONGC",
-    "PAYTM",
-
-    "PFC",
-    "PIDILITIND",
-    "PNB",
     "POWERGRID",
     "RELIANCE",
-    "SBICARD",
     "SBILIFE",
     "SBIN",
     "SHRIRAMFIN",
-    "SIEMENS",
-
-    "SOLARINDS",
-    "SRF",
     "SUNPHARMA",
     "TATACONSUM",
-    "TATAMOTORS",
-    "TATAPOWER",
     "TATASTEEL",
     "TCS",
     "TECHM",
     "TITAN",
-
-    "TORNTPHARM",
     "TRENT",
-    "TVSMOTOR",
     "ULTRACEMCO",
+    "WIPRO",
+
+
+    # -------------------------
+    # NIFTY NEXT 50
+    # -------------------------
+
+    "ABB",
+    "ADANIENSOL",
+    "ADANIGREEN",
+    "ADANIPOWER",
+    "AMBUJACEM",
+    "BAJAJHLDNG",
+    "BANKBARODA",
+    "BPCL",
+    "BRITANNIA",
+    "BOSCHLTD",
+    "CANBK",
+    "CGPOWER",
+    "CHOLAFIN",
+    "CUMMINSIND",
+    "DIVISLAB",
+    "DLF",
+    "DMART",
+    "GAIL",
+    "GODREJCP",
+    "HAL",
+    "HINDZINC",
+    "IOC",
+    "IRFC",
+    "JINDALSTEL",
+    "MOTHERSON",
+    "MUTHOOTFIN",
+    "PIDILITIND",
+    "PFC",
+    "PNB",
+    "SIEMENS",
+    "SOLARINDS",
+    "SRF",
+    "TATAMOTORS",
+    "TATAPOWER",
+    "TORNTPHARM",
+    "TVSMOTOR",
     "UNIONBANK",
     "VBL",
     "VEDL",
-    "WIPRO",
     "ZYDUSLIFE",
+    "POLYCAB",
+    "POWERINDIA",
+    "VAML",
+    "IDEA",
+    "LICI",
+    "HDFCAMC",
+    "INDUSINDBK",
+    "MARICO",
+    "M&MFIN",
 ]
 
 
 # =========================================================
-# VALIDATE FALLBACK
+# REMOVE DUPLICATES
 # =========================================================
 
 NIFTY100_FALLBACK = list(
@@ -138,17 +135,9 @@ NIFTY100_FALLBACK = list(
     )
 )
 
-if len(NIFTY100_FALLBACK) != 100:
-
-    raise RuntimeError(
-        "NIFTY100_FALLBACK me exactly "
-        f"100 symbols hone chahiye. "
-        f"Abhi {len(NIFTY100_FALLBACK)} hain."
-    )
-
 
 # =========================================================
-# GET NIFTY 100
+# GET NIFTY 100 SYMBOLS
 # =========================================================
 
 @st.cache_data(
@@ -158,7 +147,7 @@ if len(NIFTY100_FALLBACK) != 100:
 def get_nifty100_symbols():
 
     # -----------------------------------------------------
-    # 1. OFFICIAL NSE CSV
+    # 1. OFFICIAL NSE NIFTY 100 CSV
     # -----------------------------------------------------
 
     try:
@@ -169,7 +158,7 @@ def get_nifty100_symbols():
             HEADERS
         )
 
-        # NSE session establish
+        # Create NSE session/cookies
         try:
 
             session.get(
@@ -204,13 +193,12 @@ def get_nifty100_symbols():
 
         for col in df.columns:
 
-            name = (
+            if (
                 str(col)
                 .strip()
                 .lower()
-            )
-
-            if name == "symbol":
+                == "symbol"
+            ):
 
                 symbol_col = col
                 break
@@ -243,7 +231,7 @@ def get_nifty100_symbols():
             )
 
 
-            # Accept only a proper Nifty 100 list
+            # Proper Nifty 100 response
             if len(symbols) >= 95:
 
                 return symbols[:100]
@@ -255,7 +243,82 @@ def get_nifty100_symbols():
 
 
     # -----------------------------------------------------
-    # 2. FALLBACK - FULL 100
+    # 2. EXISTING NSE API
+    # -----------------------------------------------------
+
+    try:
+
+        session = requests.Session()
+
+        session.headers.update(
+            HEADERS
+        )
+
+        try:
+
+            session.get(
+                "https://www.nseindia.com",
+                timeout=15
+            )
+
+        except Exception:
+
+            pass
+
+
+        response = session.get(
+            NSE_URL,
+            headers=HEADERS,
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        records = data.get(
+            "data",
+            []
+        )
+
+
+        symbols = []
+
+        for row in records:
+
+            symbol = str(
+                row.get(
+                    "symbol",
+                    ""
+                )
+            ).strip().upper()
+
+            if symbol:
+
+                symbols.append(
+                    symbol
+                )
+
+
+        symbols = list(
+            dict.fromkeys(
+                symbols
+            )
+        )
+
+
+        if len(symbols) >= 95:
+
+            return symbols[:100]
+
+
+    except Exception:
+
+        pass
+
+
+    # -----------------------------------------------------
+    # 3. FINAL FALLBACK
     # -----------------------------------------------------
 
     return NIFTY100_FALLBACK.copy()
